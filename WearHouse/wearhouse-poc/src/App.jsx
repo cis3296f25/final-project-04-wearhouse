@@ -1,10 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
+import { getWeather, getCalendarEvent } from "./services/weatherCalendarService";
+import { suggestOutfit as generateOutfitSuggestion } from "./services/outfitSuggestionService";
 
 // Log environment variables for debugging
 console.log('URL:', import.meta.env.VITE_SUPABASE_URL);
 console.log('ANON:', import.meta.env.VITE_SUPABASE_ANON?.slice(0, 10) + '...');
-console.log(import.meta.env)
+console.log('Weather API Key:', import.meta.env.VITE_WEATHER_API_KEY ? '✅ Set' : '❌ Not set');
+console.log('Calendar API Key:', import.meta.env.VITE_GOOGLE_CALENDAR_API_KEY ? '✅ Set' : '❌ Not set');
 
 // Initialize Supabase client with env configuration
 const supabase = createClient(
@@ -35,15 +38,6 @@ async function removeBackgroundOnServer(file) {
   return new File([ab], cleanedName, { type: 'image/png' });
 }
 
-// Provide mock weather data to exercise outfit rules
-async function getMockWeather() {
-  return { tempF: 55, condition: "Rain" };
-}
-
-// Provide mock calendar event to exercise outfit rules
-async function getMockCalendarEvent() {
-  return { title: "Client Presentation", formality: "formal" };
-}
 
 export default function App() {
   // Manage UI state for items, form inputs, and status messages
@@ -105,33 +99,72 @@ export default function App() {
     await loadItems();
   }
   
-  // Generate a simple outfit using mock weather/calendar and color rules
+  // Test weather API independently
+  async function testWeather() {
+    setMessage("Testing weather API...");
+    console.log('Testing weather API...');
+    
+    try {
+      const weather = await getWeather();
+      console.log('Weather API Response:', weather);
+      
+      // Show detailed weather info
+      const weatherDetails = [
+        `📍 Location: ${weather.location || 'Unknown'}`,
+        `🌡️ Temperature: ${weather.tempF}°F (${weather.tempC || 'N/A'}°C)`,
+        `🌤️ Condition: ${weather.condition}`,
+        weather.description ? `📝 Description: ${weather.description}` : '',
+        weather.humidity ? `💧 Humidity: ${weather.humidity}%` : '',
+        weather.windSpeed ? `💨 Wind: ${weather.windSpeed} mph` : '',
+        weather.feelsLike ? `🔥 Feels like: ${weather.feelsLike}°F` : ''
+      ].filter(Boolean).join('\n');
+      
+      setMessage(`Weather API Test Success!\n${weatherDetails}`);
+      
+      // Check if using mock or real API
+      const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
+      if (!apiKey || weather.location === undefined) {
+        console.warn('⚠️ Using MOCK data - API key not found in environment');
+        setMessage(prev => prev + '\n⚠️ Using MOCK data - Add VITE_WEATHER_API_KEY to .env file\n💡 Remember to restart the dev server after adding .env variables!');
+      } else {
+        console.log('✅ Using REAL API - Weather data fetched successfully');
+      }
+    } catch (error) {
+      console.error("Weather API test failed:", error);
+      // Show detailed error message, especially for 401 errors
+      const errorMsg = error.message.includes('401') 
+        ? `❌ API Key Authentication Failed!\n\n${error.message}\n\n` +
+          `💡 Troubleshooting:\n` +
+          `• Double-check your API key in the .env file\n` +
+          `• Make sure there are no extra spaces or quotes\n` +
+          `• New API keys may take a few minutes to activate\n` +
+          `• Verify your key at https://home.openweathermap.org/api_keys`
+        : `Weather API Test Failed: ${error.message}\nCheck console for details.`;
+      setMessage(errorMsg);
+    }
+  }
+
+  // Generate outfit suggestion using weather and calendar services
   async function suggestOutfit() {
     setMessage("Generating...");
-    const weather = await getMockWeather();
-    const event = await getMockCalendarEvent();
+    
+    try {
+      // Fetch weather and calendar data
+      const weather = await getWeather();
+      const event = await getCalendarEvent();
 
-    const tops = items.filter(i => i.category === "top");
-    const bottoms = items.filter(i => i.category === "bottom");
+      // Generate outfit suggestion
+      const result = generateOutfitSuggestion({ items, weather, event });
 
-    if (!tops.length || !bottoms.length) {
-      setMessage("Need at least one top and one bottom to suggest an outfit.");
-      return;
+      if (result.success) {
+        setMessage(result.message);
+      } else {
+        setMessage(result.message);
+      }
+    } catch (error) {
+      console.error("Error generating outfit suggestion:", error);
+      setMessage("Failed to generate outfit suggestion. Please try again.");
     }
-
-    // Prefer darker palette when cold/rainy/formal
-    const preferDark = weather.tempF < 60 || weather.condition.includes("Rain") || event.formality === "formal";
-    const colorOk = (c) => preferDark ? ["black","navy","gray","brown"].includes(c.toLowerCase()) : true;
-
-    // Choose first matching items or fall back to first available
-    const top = tops.find(t => colorOk(t.color)) ?? tops[0];
-    const bottom = bottoms.find(b => colorOk(b.color)) ?? bottoms[0];
-
-    // Present recommendation summary in status line
-    setMessage(
-      `Weather ${weather.tempF}°F ${weather.condition}; Event: ${event.title} (${event.formality}). ` +
-      `Outfit → Top: ${top.name} (${top.color}), Bottom: ${bottom.name} (${bottom.color}).`
-    );
   }
 
   return (
@@ -154,9 +187,16 @@ export default function App() {
         <button type="submit">Add Item</button>
       </form>
 
-      {/* Trigger outfit suggestion using mock signals */}
-      <button onClick={suggestOutfit} style={{ marginBottom: 12 }}>Suggest Outfit (uses weather + calendar mocks)</button>
-      <div style={{ marginBottom: 12, minHeight: 24 }}>{message}</div>
+      {/* Weather API Testing */}
+      <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={testWeather} style={{ backgroundColor: "#4CAF50", color: "white" }}>
+          Test Weather API
+        </button>
+        <button onClick={suggestOutfit}>Suggest Outfit</button>
+      </div>
+      <div style={{ marginBottom: 12, minHeight: 24, whiteSpace: "pre-line", fontFamily: "monospace", fontSize: "14px" }}>
+        {message || "Click 'Test Weather API' to verify your API key is working"}
+      </div>
 
       {/* Render items grid from database */}
       <h3>Your Items</h3>
