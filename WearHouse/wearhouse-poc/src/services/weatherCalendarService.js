@@ -246,6 +246,149 @@ async function getMockWeather() {
 }
 
 /**
+ * Get multiple calendar events for a date range (for FullCalendar)
+ * @param {Date} startDate - Start date of the range
+ * @param {Date} endDate - End date of the range
+ * @returns {Promise<Array>} Array of calendar events in FullCalendar format
+ */
+export async function getCalendarEvents(startDate, endDate) {
+  const apiKey = import.meta.env.VITE_GOOGLE_CALENDAR_API_KEY;
+  const calendarId = import.meta.env.VITE_GOOGLE_CALENDAR_ID || 'primary';
+
+  // If no API key, fall back to mock
+  if (!apiKey) {
+    console.warn('VITE_GOOGLE_CALENDAR_API_KEY not set, using mock calendar data');
+    return getMockCalendarEvents(startDate, endDate);
+  }
+
+  try {
+    const timeMin = startDate.toISOString();
+    const timeMax = endDate.toISOString();
+
+    // Fetch events from Google Calendar API
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+      `key=${apiKey}&timeMin=${timeMin}&timeMax=${timeMax}&maxResults=250&orderBy=startTime&singleEvents=true`;
+    
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 403) {
+        console.warn('Google Calendar API access denied. Make sure the API key has Calendar API enabled.');
+      }
+      throw new Error(`Calendar API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    // Convert Google Calendar events to FullCalendar format
+    if (!data.items || data.items.length === 0) {
+      return [];
+    }
+
+    return data.items.map(event => {
+      const start = event.start?.dateTime || event.start?.date;
+      const end = event.end?.dateTime || event.end?.date;
+      const formality = inferFormality(event.summary || '', event.description || '');
+
+      return {
+        id: event.id,
+        title: event.summary || "Untitled Event",
+        start: start || new Date(),
+        end: end || null,
+        allDay: !event.start?.dateTime, // All-day if no dateTime
+        formality: formality,
+        location: event.location || null,
+        description: event.description || null,
+        backgroundColor: getFormalityColor(formality),
+        borderColor: getFormalityColor(formality),
+        extendedProps: {
+          formality: formality,
+          location: event.location,
+          description: event.description
+        }
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching calendar events:', error);
+    // Fall back to mock on error
+    console.warn('Falling back to mock calendar data');
+    return getMockCalendarEvents(startDate, endDate);
+  }
+}
+
+/**
+ * Get weather for a specific date (for forecast integration with calendar)
+ * @param {Date} date - Date to get weather for
+ * @param {Object} options - Configuration options
+ * @returns {Promise<Object>} Weather data
+ */
+export async function getWeatherForDate(date, options = {}) {
+  // For now, we'll use current weather (OpenWeatherMap free tier doesn't include historical)
+  // In production, you'd use a forecast API or historical weather API
+  return getWeather(options);
+}
+
+/**
+ * Convert calendar event to FullCalendar format with weather integration
+ * @param {Object} event - Calendar event from getCalendarEvent
+ * @param {Object} weather - Weather data (optional)
+ * @returns {Object} FullCalendar event object
+ */
+export function convertToFullCalendarEvent(event, weather = null) {
+  const today = new Date();
+  const eventDate = new Date(today);
+  
+  // If event has startTime, parse it; otherwise use current time
+  if (event.startTime) {
+    const [hours, minutes] = event.startTime.split(':').map(Number);
+    eventDate.setHours(hours, minutes || 0, 0, 0);
+  }
+
+  const endDate = new Date(eventDate);
+  if (event.endTime) {
+    const [hours, minutes] = event.endTime.split(':').map(Number);
+    endDate.setHours(hours, minutes || 0, 0, 0);
+  } else {
+    endDate.setHours(eventDate.getHours() + 1, 0, 0, 0); // Default 1 hour duration
+  }
+
+  const title = weather 
+    ? `${event.title} (${weather.tempF}°F ${weather.condition})`
+    : event.title;
+
+  return {
+    id: `event-${Date.now()}-${Math.random()}`,
+    title: title,
+    start: eventDate.toISOString(),
+    end: endDate.toISOString(),
+    allDay: !event.startTime,
+    backgroundColor: getFormalityColor(event.formality),
+    borderColor: getFormalityColor(event.formality),
+    extendedProps: {
+      formality: event.formality,
+      location: event.location,
+      description: event.description,
+      weather: weather
+    }
+  };
+}
+
+/**
+ * Get color based on formality level
+ * @param {string} formality - Formality level
+ * @returns {string} Hex color code
+ */
+function getFormalityColor(formality) {
+  const colors = {
+    formal: '#8B0000',    // Dark red
+    business: '#1E3A8A',  // Dark blue
+    casual: '#059669'     // Green
+  };
+  return colors[formality] || colors.casual;
+}
+
+/**
  * Mock calendar event for development/testing
  * @returns {Promise<Object>} Mock calendar event object
  */
@@ -256,11 +399,57 @@ async function getMockCalendarEvent() {
   return { 
     title: "Client Presentation", 
     formality: "formal",
-    // Additional fields that could be useful:
-    // startTime: "09:00",
-    // endTime: "10:30",
-    // location: "Conference Room A",
-    // attendees: 5
+    startTime: "09:00",
+    endTime: "10:30",
+    location: "Conference Room A"
   };
+}
+
+/**
+ * Mock multiple calendar events for development/testing
+ * @param {Date} startDate - Start date
+ * @param {Date} endDate - End date
+ * @returns {Promise<Array>} Array of mock calendar events in FullCalendar format
+ */
+async function getMockCalendarEvents(startDate, endDate) {
+  // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  const events = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Generate a few mock events
+  const mockEvents = [
+    { title: "Client Presentation", formality: "formal", hour: 9, duration: 1.5 },
+    { title: "Team Lunch", formality: "business", hour: 12, duration: 1 },
+    { title: "Gym Session", formality: "casual", hour: 18, duration: 1 }
+  ];
+
+  mockEvents.forEach((mock, index) => {
+    const eventDate = new Date(today);
+    eventDate.setDate(today.getDate() + index);
+    eventDate.setHours(mock.hour, 0, 0, 0);
+    
+    const endDate = new Date(eventDate);
+    endDate.setHours(eventDate.getHours() + mock.duration, 0, 0, 0);
+
+    events.push({
+      id: `mock-event-${index}`,
+      title: mock.title,
+      start: eventDate.toISOString(),
+      end: endDate.toISOString(),
+      allDay: false,
+      backgroundColor: getFormalityColor(mock.formality),
+      borderColor: getFormalityColor(mock.formality),
+      extendedProps: {
+        formality: mock.formality,
+        location: null,
+        description: null
+      }
+    });
+  });
+
+  return events;
 }
 

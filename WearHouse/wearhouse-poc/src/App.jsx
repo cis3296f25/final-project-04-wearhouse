@@ -1,7 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
-import { getWeather, getCalendarEvent } from "./services/weatherCalendarService";
+import { getWeather, getCalendarEvent, getCalendarEvents } from "./services/weatherCalendarService";
 import { suggestOutfit as generateOutfitSuggestion } from "./services/outfitSuggestionService";
+import FullCalendar from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
 
 // Log environment variables for debugging
 console.log('URL:', import.meta.env.VITE_SUPABASE_URL);
@@ -47,6 +51,10 @@ export default function App() {
   const [category, setCategory] = useState("top");
   const [color, setColor] = useState("black");
   const [message, setMessage] = useState("");
+  
+  // Calendar state
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [calendarView, setCalendarView] = useState("dayGridMonth");
 
   // Load items from Supabase and update grid
   async function loadItems() {
@@ -56,6 +64,25 @@ export default function App() {
 
   // Fetch initial items on mount
   useEffect(() => { loadItems(); }, []);
+
+  // Load calendar events for the current view
+  async function loadCalendarEvents(start, end) {
+    try {
+      const events = await getCalendarEvents(start, end);
+      setCalendarEvents(events);
+    } catch (error) {
+      console.error('Error loading calendar events:', error);
+      setMessage('Failed to load calendar events. Check console for details.');
+    }
+  }
+
+  // Load calendar events on mount and when view changes
+  useEffect(() => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    loadCalendarEvents(startOfMonth, endOfMonth);
+  }, []);
 
   // Handle upload: remove background → upload to storage → insert DB row
   async function handleUpload(e) {
@@ -196,6 +223,52 @@ export default function App() {
       </div>
       <div style={{ marginBottom: 12, minHeight: 24, whiteSpace: "pre-line", fontFamily: "monospace", fontSize: "14px" }}>
         {message || "Click 'Test Weather API' to verify your API key is working"}
+      </div>
+
+      {/* FullCalendar Component */}
+      <h3>Calendar & Events</h3>
+      <div style={{ marginBottom: 24 }}>
+        <FullCalendar
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          initialView={calendarView}
+          events={calendarEvents}
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+          }}
+          height="auto"
+          eventClick={(info) => {
+            const event = info.event;
+            const extendedProps = event.extendedProps || {};
+            const weather = extendedProps.weather;
+            
+            let eventDetails = `📅 ${event.title}\n`;
+            if (extendedProps.formality) {
+              eventDetails += `👔 Formality: ${extendedProps.formality}\n`;
+            }
+            if (extendedProps.location) {
+              eventDetails += `📍 Location: ${extendedProps.location}\n`;
+            }
+            if (weather) {
+              eventDetails += `🌤️ Weather: ${weather.tempF}°F ${weather.condition}\n`;
+            }
+            if (extendedProps.description) {
+              eventDetails += `📝 ${extendedProps.description}`;
+            }
+            
+            setMessage(eventDetails);
+            info.jsEvent.preventDefault();
+          }}
+          datesSet={(dateInfo) => {
+            // Load events when calendar view changes
+            loadCalendarEvents(dateInfo.start, dateInfo.end);
+          }}
+          editable={false}
+          selectable={false}
+          dayMaxEvents={true}
+          moreLinkClick="popover"
+        />
       </div>
 
       {/* Render items grid from database */}
