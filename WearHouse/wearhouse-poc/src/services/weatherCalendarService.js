@@ -4,8 +4,9 @@
  * 
  * Environment Variables Required:
  * - VITE_WEATHER_API_KEY: OpenWeatherMap API key (get free at https://openweathermap.org/api)
- * - VITE_GOOGLE_CALENDAR_API_KEY: Google Calendar API key (optional, for calendar integration)
- * - VITE_GOOGLE_CALENDAR_ID: Your Google Calendar ID (optional)
+ * - VITE_GOOGLE_CALENDAR_API_KEY: Google Calendar API key (optional, for public calendar access)
+ * - VITE_GOOGLE_CLIENT_ID: Google OAuth Client ID (required for private calendar access)
+ * - VITE_GOOGLE_CALENDAR_ID: Your Google Calendar ID (optional, defaults to 'primary')
  */
 
 /**
@@ -131,15 +132,16 @@ function getUserLocation() {
 /**
  * Get calendar event for a specific date from Google Calendar API
  * @param {Date} date - Date to fetch events for (defaults to today)
+ * @param {string} accessToken - OAuth access token (optional, for authenticated requests)
  * @returns {Promise<Object>} Calendar event with title and formality
  */
-export async function getCalendarEvent(date = new Date()) {
+export async function getCalendarEvent(date = new Date(), accessToken = null) {
   const apiKey = import.meta.env.VITE_GOOGLE_CALENDAR_API_KEY;
   const calendarId = import.meta.env.VITE_GOOGLE_CALENDAR_ID || 'primary';
 
-  // If no API key, fall back to mock
-  if (!apiKey) {
-    console.warn('VITE_GOOGLE_CALENDAR_API_KEY not set, using mock calendar data');
+  // If no API key and no access token, fall back to mock
+  if (!apiKey && !accessToken) {
+    console.warn('No Google Calendar credentials set, using mock calendar data');
     return getMockCalendarEvent();
   }
 
@@ -153,16 +155,27 @@ export async function getCalendarEvent(date = new Date()) {
     const timeMin = startOfDay.toISOString();
     const timeMax = endOfDay.toISOString();
 
-    // Fetch events from Google Calendar API
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
-      `key=${apiKey}&timeMin=${timeMin}&timeMax=${timeMax}&maxResults=1&orderBy=startTime&singleEvents=true`;
+    // Build URL and headers
+    let url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+      `timeMin=${timeMin}&timeMax=${timeMax}&maxResults=1&orderBy=startTime&singleEvents=true`;
     
-    const response = await fetch(url);
+    if (accessToken) {
+      url += `&access_token=${accessToken}`;
+    } else if (apiKey) {
+      url += `&key=${apiKey}`;
+    }
+
+    const headers = {};
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
+    const response = await fetch(url, { headers });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       if (response.status === 403) {
-        console.warn('Google Calendar API access denied. Make sure the API key has Calendar API enabled.');
+        console.warn('Google Calendar API access denied. Make sure the API key has Calendar API enabled or use OAuth.');
       }
       throw new Error(`Calendar API error: ${response.status} ${response.statusText}`);
     }
@@ -183,10 +196,12 @@ export async function getCalendarEvent(date = new Date()) {
     const start = event.start?.dateTime || event.start?.date;
     const end = event.end?.dateTime || event.end?.date;
 
-    // Infer formality from event title/description
-    const formality = inferFormality(event.summary || '', event.description || '');
+    // Get formality from extendedProperties (if set) or infer from title/description
+    const storedFormality = event.extendedProperties?.private?.wearhouseFormality;
+    const formality = storedFormality || inferFormality(event.summary || '', event.description || '');
 
     return {
+      id: event.id,
       title: event.summary || "Untitled Event",
       formality: formality,
       startTime: start ? new Date(start).toLocaleTimeString() : null,
@@ -249,15 +264,16 @@ async function getMockWeather() {
  * Get multiple calendar events for a date range (for FullCalendar)
  * @param {Date} startDate - Start date of the range
  * @param {Date} endDate - End date of the range
+ * @param {string} accessToken - OAuth access token (optional, for authenticated requests)
  * @returns {Promise<Array>} Array of calendar events in FullCalendar format
  */
-export async function getCalendarEvents(startDate, endDate) {
+export async function getCalendarEvents(startDate, endDate, accessToken = null) {
   const apiKey = import.meta.env.VITE_GOOGLE_CALENDAR_API_KEY;
   const calendarId = import.meta.env.VITE_GOOGLE_CALENDAR_ID || 'primary';
 
-  // If no API key, fall back to mock
-  if (!apiKey) {
-    console.warn('VITE_GOOGLE_CALENDAR_API_KEY not set, using mock calendar data');
+  // If no API key and no access token, fall back to mock
+  if (!apiKey && !accessToken) {
+    console.warn('No Google Calendar credentials set, using mock calendar data');
     return getMockCalendarEvents(startDate, endDate);
   }
 
@@ -265,16 +281,27 @@ export async function getCalendarEvents(startDate, endDate) {
     const timeMin = startDate.toISOString();
     const timeMax = endDate.toISOString();
 
-    // Fetch events from Google Calendar API
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
-      `key=${apiKey}&timeMin=${timeMin}&timeMax=${timeMax}&maxResults=250&orderBy=startTime&singleEvents=true`;
+    // Build URL and headers
+    let url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+      `timeMin=${timeMin}&timeMax=${timeMax}&maxResults=250&orderBy=startTime&singleEvents=true`;
     
-    const response = await fetch(url);
+    if (accessToken) {
+      url += `&access_token=${accessToken}`;
+    } else if (apiKey) {
+      url += `&key=${apiKey}`;
+    }
+
+    const headers = {};
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
+    const response = await fetch(url, { headers });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       if (response.status === 403) {
-        console.warn('Google Calendar API access denied. Make sure the API key has Calendar API enabled.');
+        console.warn('Google Calendar API access denied. Make sure the API key has Calendar API enabled or use OAuth.');
       }
       throw new Error(`Calendar API error: ${response.status} ${response.statusText}`);
     }
@@ -289,7 +316,10 @@ export async function getCalendarEvents(startDate, endDate) {
     return data.items.map(event => {
       const start = event.start?.dateTime || event.start?.date;
       const end = event.end?.dateTime || event.end?.date;
-      const formality = inferFormality(event.summary || '', event.description || '');
+      
+      // Get formality from extendedProperties (if set) or infer from title/description
+      const storedFormality = event.extendedProperties?.private?.wearhouseFormality;
+      const formality = storedFormality || inferFormality(event.summary || '', event.description || '');
 
       return {
         id: event.id,
@@ -386,6 +416,85 @@ function getFormalityColor(formality) {
     casual: '#059669'     // Green
   };
   return colors[formality] || colors.casual;
+}
+
+/**
+ * Update event formality in Google Calendar
+ * @param {string} eventId - Google Calendar event ID
+ * @param {string} formality - Formality level ('formal', 'business', or 'casual')
+ * @param {string} accessToken - OAuth access token (required)
+ * @param {string} calendarId - Calendar ID (optional, defaults to 'primary')
+ * @returns {Promise<Object>} Updated event
+ */
+export async function updateEventFormality(eventId, formality, accessToken, calendarId = 'primary') {
+  if (!accessToken) {
+    throw new Error('Access token required to update event formality');
+  }
+
+  if (!['formal', 'business', 'casual'].includes(formality)) {
+    throw new Error('Formality must be "formal", "business", or "casual"');
+  }
+
+  try {
+    // First, get the current event
+    const getUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`;
+    const getResponse = await fetch(getUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    });
+
+    if (!getResponse.ok) {
+      throw new Error(`Failed to fetch event: ${getResponse.status} ${getResponse.statusText}`);
+    }
+
+    const event = await getResponse.json();
+
+    // Update extendedProperties to store formality
+    if (!event.extendedProperties) {
+      event.extendedProperties = {};
+    }
+    if (!event.extendedProperties.private) {
+      event.extendedProperties.private = {};
+    }
+    event.extendedProperties.private.wearhouseFormality = formality;
+
+    // Update the event
+    const updateUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`;
+    const updateResponse = await fetch(updateUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
+
+    if (!updateResponse.ok) {
+      const errorData = await updateResponse.json().catch(() => ({}));
+      throw new Error(`Failed to update event: ${updateResponse.status} ${updateResponse.statusText} - ${JSON.stringify(errorData)}`);
+    }
+
+    const updatedEvent = await updateResponse.json();
+    
+    // Return in our format
+    const start = updatedEvent.start?.dateTime || updatedEvent.start?.date;
+    const end = updatedEvent.end?.dateTime || updatedEvent.end?.date;
+    const storedFormality = updatedEvent.extendedProperties?.private?.wearhouseFormality || formality;
+
+    return {
+      id: updatedEvent.id,
+      title: updatedEvent.summary || "Untitled Event",
+      formality: storedFormality,
+      startTime: start ? new Date(start).toLocaleTimeString() : null,
+      endTime: end ? new Date(end).toLocaleTimeString() : null,
+      location: updatedEvent.location || null,
+      description: updatedEvent.description || null
+    };
+  } catch (error) {
+    console.error('Error updating event formality:', error);
+    throw error;
+  }
 }
 
 /**
