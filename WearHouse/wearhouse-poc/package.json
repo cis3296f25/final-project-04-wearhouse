@@ -13,6 +13,11 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.x.x",
+    "@fullcalendar/react": "^6.x.x",
+    "@fullcalendar/daygrid": "^6.x.x",
+    "@fullcalendar/timegrid": "^6.x.x",
+    "@fullcalendar/interaction": "^6.x.x",
     "@supabase/supabase-js": "^2.57.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
