@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
+import "./App.css";
 
 // Log environment variables for debugging
 console.log('URL:', import.meta.env.VITE_SUPABASE_URL);
@@ -70,17 +71,8 @@ function updateLocationHash(page) {
   window.location.hash = `#${page}`;
 }
 
-// Shared button styling so the active link pops
-const navLinkStyles = (isActive) => ({
-  padding: "8px 18px",
-  borderRadius: 999,
-  border: "1px solid rgba(15, 23, 42, 0.2)",
-  textDecoration: "none",
-  color: isActive ? "#fff" : "#0f172a",
-  backgroundColor: isActive ? "#0f172a" : "transparent",
-  fontWeight: 600,
-  transition: "background-color 0.2s ease, color 0.2s ease",
-});
+const navLinkClassName = (isActive) =>
+  `app-nav-link${isActive ? " is-active" : ""}`;
 
 export default function App() {
   // Manage UI state for navigation, items, form inputs, and status messages
@@ -91,15 +83,32 @@ export default function App() {
   const [category, setCategory] = useState("top");
   const [color, setColor] = useState("black");
   const [message, setMessage] = useState("");
+  // Track the logged-in Supabase user so uploads/queries can be scoped
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Load items from Supabase and update grid
-  async function loadItems() {
-    const { data, error } = await supabase.from("items").select("*").order("created_at", { ascending: false });
+  // Load items for the current user from Supabase
+  async function loadItems(userId = currentUser?.user_id) {
+    if (!userId) {
+      setItems([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("items")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
     if (!error) setItems(data ?? []);
   }
 
-  // Fetch initial items on mount
-  useEffect(() => { loadItems(); }, []);
+  // Whenever the logged-in user changes, refresh their closet items
+  useEffect(() => {
+    if (!currentUser?.user_id) {
+      setItems([]);
+      return;
+    }
+    loadItems(currentUser.user_id);
+  }, [currentUser?.user_id]);
 
   // Keep nav state in sync if user edits the hash manually
   useEffect(() => {
@@ -109,9 +118,13 @@ export default function App() {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  // Handle upload: remove background  upload to storage  insert DB row
+  // Handle upload: remove background  -  upload to storage  -  insert DB row
   async function handleUpload(e) {
     e.preventDefault();
+    if (!currentUser?.user_id) {
+      setMessage("Please log in before uploading items.");
+      return;
+    }
     if (!file) return;
 
     // Remove background via proxy with graceful fallback
@@ -146,14 +159,14 @@ export default function App() {
     const image_url = pub.publicUrl;
 
     const { error: dbErr } = await supabase.from('items').insert({
-      name, category, color, image_url
+      name, category, color, image_url, user_id: currentUser.user_id
     });
     if (dbErr) { setMessage('DB insert failed: ' + dbErr.message); return; }
 
     // Reset form and refresh list
     setMessage('Added item with background removed!');
     setName(''); setCategory('top'); setColor('black'); setFile(null);
-    await loadItems();
+    await loadItems(currentUser.user_id);
   }
 
   // Generate a simple outfit using mock weather/calendar and color rules
@@ -180,30 +193,34 @@ export default function App() {
 
     // Present recommendation summary in status line
     setMessage(
-      `Weather ${weather.tempF}�F ${weather.condition}; Event: ${event.title} (${event.formality}). ` +
-      `Outfit  Top: ${top.name} (${top.color}), Bottom: ${bottom.name} (${bottom.color}).`
+      `Weather ${weather.tempF} deg F ${weather.condition}; Event: ${event.title} (${event.formality}). ` +
+      `Outfit - Top: ${top.name} (${top.color}), Bottom: ${bottom.name} (${bottom.color}).`
     );
   }
 
   const isHome = activePage === "home";
+  const isLoggedIn = Boolean(currentUser?.user_id);
+
+  function handleLogout() {
+    setCurrentUser(null);
+    setItems([]);
+    setMessage('');
+  }
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#f4f6fb" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "Inter, system-ui, Arial" }}>
-        <header style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+    <div className="app-shell">
+      <div className="app-inner">
+        <header className="app-header">
           <div>
-            <h1 style={{ margin: 0 }}>WearHouse POC</h1>
-            <p style={{ margin: "4px 0 0", color: "#475467" }}>
-              Jump between the wardrobe toolkit and lightweight auth previews through the nav.
-            </p>
+            <h1 className="app-title">WearHouse POC</h1>
           </div>
-          <nav style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <nav className="app-nav">
             {NAV_LINKS.map(link => (
               <a
                 key={link.id}
                 href={`#${link.id}`}
                 aria-current={activePage === link.id ? "page" : undefined}
-                style={navLinkStyles(activePage === link.id)}
+                className={navLinkClassName(activePage === link.id)}
                 onClick={(evt) => {
                   evt.preventDefault();
                   setActivePage(link.id);
@@ -214,11 +231,26 @@ export default function App() {
               </a>
             ))}
           </nav>
+          {isLoggedIn && (
+            <div className="session-bar">
+              <span className="session-indicator logged-in">
+                {`Logged in as ${currentUser.user_email}`}
+              </span>
+              <button type="button" className="logout-button" onClick={handleLogout}>
+                Log out
+              </button>
+            </div>
+          )}
         </header>
 
         {isHome ? (
-          <section style={{ backgroundColor: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)" }}>
-            <form onSubmit={handleUpload} style={{ marginBottom: 16, display: "grid", gap: 8, maxWidth: 420 }}>
+          <section className="card home-card">
+            {!isLoggedIn && (
+              <div className="login-alert">
+                Log in to upload clothing items and view your personal closet.
+              </div>
+            )}
+            <form onSubmit={handleUpload} className="item-form">
               <input placeholder="Item name (e.g., Blue Oxford)" value={name} onChange={e => setName(e.target.value)} required />
               <select value={category} onChange={e => setCategory(e.target.value)}>
                 <option value="top">top</option>
@@ -229,25 +261,33 @@ export default function App() {
               </select>
               <input placeholder="Color (e.g., navy)" value={color} onChange={e => setColor(e.target.value)} />
               <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} required />
-              <button type="submit">Add Item</button>
+              <button type="submit" disabled={!isLoggedIn}>Add Item</button>
             </form>
 
-            <button onClick={suggestOutfit} style={{ marginBottom: 12 }}>Suggest Outfit (uses weather + calendar mocks)</button>
-            <div style={{ marginBottom: 12, minHeight: 24 }}>{message}</div>
+            <button onClick={suggestOutfit} className="suggest-button">Suggest Outfit (uses weather + calendar mocks)</button>
+            <div className="status-message">{message}</div>
 
             <h3>Your Items</h3>
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
+            <div className="items-grid">
               {items.map(it => (
-                <div key={it.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8 }}>
-                  <img src={it.image_url} style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 6 }} />
-                  <div style={{ fontWeight: 600, marginTop: 6 }}>{it.name}</div>
-                  <div style={{ fontSize: 12, opacity: 0.8 }}>{it.category}  {it.color}</div>
+                <div key={it.id} className="item-card">
+                  <img src={it.image_url} alt={it.name} className="item-card__image" />
+                  <div className="item-card__name">{it.name}</div>
+                  <div className="item-card__meta">{`${it.category} - ${it.color}`}</div>
                 </div>
               ))}
             </div>
           </section>
         ) : (
-          <AuthPage mode={activePage} />
+          <AuthPage
+            mode={activePage}
+            onLogin={(profile) => {
+              setCurrentUser(profile);
+              setActivePage("home");
+              updateLocationHash("home");
+              setMessage('');
+            }}
+          />
         )}
       </div>
     </div>
@@ -255,7 +295,7 @@ export default function App() {
 }
 
 // Lightweight Supabase-backed auth prototype
-function AuthPage({ mode }) {
+function AuthPage({ mode, onLogin }) {
   const isSignup = mode === "signup";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -303,7 +343,7 @@ function AuthPage({ mode }) {
         const emailValue = email.trim().toLowerCase();
         const { data, error } = await supabase
           .from("users")
-          .select("user_id, user_closet, user_zip")
+          .select("user_id, user_email, user_closet, user_zip")
           .eq("user_email", emailValue)
           .eq("user_password", password)
           .maybeSingle();
@@ -316,7 +356,13 @@ function AuthPage({ mode }) {
         }
 
         setStatusTone("success");
-        setStatus(`Logged in as user #${data.user_id}. Closet size: ${data.user_closet ?? "not set"}.`);
+        setStatus(`Logged in as ${data.user_email}. Closet size: ${data.user_closet ?? "not set"}.`);
+        onLogin?.({
+          user_id: data.user_id,
+          user_email: data.user_email ?? emailValue,
+          user_closet: data.user_closet,
+          user_zip: data.user_zip,
+        });
       }
     } catch (err) {
       console.error(err);
@@ -328,14 +374,14 @@ function AuthPage({ mode }) {
   }
 
   return (
-    <section style={{ backgroundColor: "#fff", borderRadius: 20, padding: 24, boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)", maxWidth: 520, margin: "24px auto" }}>
-      <h2 style={{ marginTop: 0 }}>{title}</h2>
-      <p style={{ margin: "4px 0 16px", color: "#475467" }}>
+    <section className="card auth-card">
+      <h2 className="auth-title">{title}</h2>
+      <p className="auth-description">
         {isSignup
           ? "Store email, password, closet capacity, and zip directly inside the Supabase users table."
           : "Use the credentials you previously saved to verify the Supabase row exists."}
       </p>
-      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
+      <form onSubmit={handleSubmit} className="auth-form">
         <input
           type="email"
           placeholder="Email address"
@@ -373,16 +419,13 @@ function AuthPage({ mode }) {
         </button>
       </form>
       {status && (
-        <div
-          style={{
-            marginTop: 12,
-            color: statusTone === "success" ? "#047857" : "#b91c1c",
-            fontWeight: 600,
-          }}
-        >
+        <div className={`auth-status ${statusTone === "success" ? "is-success" : "is-error"}`}>
           {status}
         </div>
       )}
     </section>
   );
 }
+
+
+
