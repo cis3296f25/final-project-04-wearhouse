@@ -21,29 +21,24 @@ Proof of concept for a smart digital wardrobe. Demonstrates:
    Microsoft Windows 10, Version 22H2 (OS Build 19045.6332)
    npm Version 10.5.0
    node Version 20.13.1
-1. Clone and install:  
+
+1. Clone and navigate to the project:  
    ```bash
    git clone https://github.com/YOUR-USERNAME/wearhouse-poc.git
-   cd wearhouse-poc 
+   cd wearhouse-poc/WearHouse/wearhouse-poc
    npm install
    ```
-2. Create Supabase project, bucket `items`, and `items` table.  
-3. Add `.env` in root (in the wearhouse-poc folder):  
-   ```
-   VITE_SUPABASE_URL=your-url
-   VITE_SUPABASE_ANON=your-anon-key
-   VITE_REMOVE_BG_PROXY=http://localhost:3001/remove-bg
-   ```
-   (You need these variables sent to you privately.)
-4. Start proxy (in `/server`):  
+
+2. Start proxy server (in a separate terminal, from `wearhouse-poc/server` directory):  
    ```bash
+   cd server
    npm install
-   echo "REMOVE_BG_KEY=your-removebg-key" > .env
    npm start
    ```
-   (Create your own on the REMOVEBG website or have it sent to you privately by owner.)
-5. Run frontend:  
+
+3. Run frontend (from `wearhouse-poc` directory):  
    ```bash
+   npm install
    npm run dev
    ```
 
