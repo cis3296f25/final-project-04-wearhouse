@@ -28,18 +28,20 @@ Proof of concept for a smart digital wardrobe. Demonstrates:
    npm install
    ```
 2. Create Supabase project, bucket `items`, and `items` table.  
-3. Add `.env` in root:  
+3. Add `.env` in root (in the wearhouse-poc folder):  
    ```
    VITE_SUPABASE_URL=your-url
    VITE_SUPABASE_ANON=your-anon-key
    VITE_REMOVE_BG_PROXY=http://localhost:3001/remove-bg
    ```
+   (You need these variables sent to you privately.)
 4. Start proxy (in `/server`):  
    ```bash
    npm install
    echo "REMOVE_BG_KEY=your-removebg-key" > .env
    npm start
    ```
+   (Create your own on the REMOVEBG website or have it sent to you privately by owner.)
 5. Run frontend:  
    ```bash
    npm run dev
