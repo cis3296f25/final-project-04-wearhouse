@@ -1,5 +1,13 @@
+import "./App.css";
 import { createClient } from "@supabase/supabase-js";
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "react"; 
+
+import Header from "./components/Header";
+import ItemCard from "./components/ItemCard";
+import UploadForm from "./components/UploadForm";
+import AddItemCard from "./components/AddItemCard";
+
+
 
 // Log environment variables for debugging
 console.log('URL:', import.meta.env.VITE_SUPABASE_URL);
@@ -53,6 +61,8 @@ export default function App() {
   const [category, setCategory] = useState("top");
   const [color, setColor] = useState("black");
   const [message, setMessage] = useState("");
+
+  const [showAddModal, setShowAddModal] = useState(false);
 
   // Load items from Supabase and update grid
   async function loadItems() {
@@ -135,41 +145,75 @@ export default function App() {
   }
 
   return (
-    // Render main container and typography
-    <div style={{ padding: 24, fontFamily: "Inter, system-ui, Arial" }}>
-      <h1>• WearHouse POC •</h1>
+    <div className="app-root">
+      {/* FULL-WIDTH HEADER */}
+      <Header />
 
-      {/* Render upload form and inputs */}
-      <form onSubmit={handleUpload} style={{ marginBottom: 16, display: "grid", gap: 8, maxWidth: 420 }}>
-        <input placeholder="Item name (e.g., Blue Oxford)" value={name} onChange={e=>setName(e.target.value)} required />
-        <select value={category} onChange={e=>setCategory(e.target.value)}>
-          <option value="top">top</option>
-          <option value="bottom">bottom</option>
-          <option value="outerwear">outerwear</option>
-          <option value="shoes">shoes</option>
-          <option value="accessory">accessory</option>
-        </select>
-        <input placeholder="Color (e.g., navy)" value={color} onChange={e=>setColor(e.target.value)} />
-        <input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0] ?? null)} required />
-        <button type="submit">Add Item</button>
-      </form>
+      {/* MAIN CONTENT */}
+      <main className="app-main">
 
-      {/* Trigger outfit suggestion using mock signals */}
-      <button onClick={suggestOutfit} style={{ marginBottom: 12 }}>Suggest Outfit (uses weather + calendar mocks)</button>
-      <div style={{ marginBottom: 12, minHeight: 24 }}>{message}</div>
-
-      {/* Render items grid from database */}
-      <h3>Your Items</h3>
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-        {items.map(it => (
-          <div key={it.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8 }}>
-            {/* Display stored image with background removed */}
-            <img src={it.image_url} style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 6 }} />
-            <div style={{ fontWeight: 600, marginTop: 6 }}>{it.name}</div>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>{it.category} • {it.color}</div>
+        {showAddModal && (
+          <div className="modal-backdrop">
+            <div className="modal">
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setShowAddModal(false)}
+              >
+                ×
+              </button>
+              <h2 className="modal-title">Add Item</h2>
+              <UploadForm
+                name={name}
+                category={category}
+                color={color}
+                setName={setName}
+                setCategory={setCategory}
+                setColor={setColor}
+                setFile={setFile}
+                onSubmit={async (e) => {
+                  await handleUpload(e);
+                  setShowAddModal(false); // close modal after successful submit
+                }}        
+              />
+            </div>
           </div>
-        ))}
-      </div>
+        )}
+
+        {/* Status message */}
+        <div className="status-message">{message}</div>
+
+        {/* Toolbar with Suggest Outfit button on main screen */}
+        <div className="toolbar">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={suggestOutfit}
+          >
+            Suggest Outfit
+          </button>
+        </div>
+
+
+        {/* Items grid */}
+        <div className="closet-section">
+          <h3 className="items-section-title">My Closet</h3>
+
+          <div className="items-grid">
+            <AddItemCard onClick={() => setShowAddModal(true)} />
+            {items.map((it) => (
+              <ItemCard
+                key={it.id}
+                imageUrl={it.image_url}
+                name={it.name}
+                category={it.category}
+                color={it.color}
+              />
+            ))}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
+
