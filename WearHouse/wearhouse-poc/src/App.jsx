@@ -102,8 +102,72 @@ export default function App() {
   const [newEventEndTime, setNewEventEndTime] = useState("");
   const [newEventFormality, setNewEventFormality] = useState("casual");
 
+  // Mock data for preview when not logged in or no items
+  const mockItems = [
+    { id: "mock-1", name: "Blue Oxford Shirt", category: "top", color: "blue", image_url: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=300&h=300&fit=crop" },
+    { id: "mock-2", name: "White T-Shirt", category: "top", color: "white", image_url: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=300&h=300&fit=crop" },
+    { id: "mock-3", name: "Black Jeans", category: "bottom", color: "black", image_url: "https://images.unsplash.com/photo-1542272604-787c3835535d?w=300&h=300&fit=crop" },
+    { id: "mock-4", name: "Khaki Chinos", category: "bottom", color: "khaki", image_url: "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=300&h=300&fit=crop" },
+    { id: "mock-5", name: "White Sneakers", category: "shoes", color: "white", image_url: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=300&h=300&fit=crop" },
+    { id: "mock-6", name: "Navy Blazer", category: "outerwear", color: "navy", image_url: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300&h=300&fit=crop" },
+  ];
+
+  const [mockOutfits, setMockOutfits] = useState([
+    {
+      id: "outfit-1",
+      name: "Casual Friday",
+      category: "casual",
+      is_favorite: true,
+      notes: "Great for casual office days",
+      weather_temp: 72,
+      weather_condition: "Sunny",
+      event_title: "Team Meeting",
+      event_formality: "casual",
+      created_at: new Date().toISOString(),
+      top: mockItems[0],
+      bottom: mockItems[2],
+      shoes: mockItems[4],
+      outerwear: null,
+    },
+    {
+      id: "outfit-2",
+      name: "Business Look",
+      category: "work",
+      is_favorite: false,
+      notes: null,
+      weather_temp: 65,
+      weather_condition: "Cloudy",
+      event_title: "Client Presentation",
+      event_formality: "business",
+      created_at: new Date(Date.now() - 86400000).toISOString(),
+      top: mockItems[0],
+      bottom: mockItems[3],
+      shoes: mockItems[4],
+      outerwear: mockItems[5],
+    },
+  ]);
+
+  // Outfit storage states
+  const [outfits, setOutfits] = useState([]);
+  const [activeTab, setActiveTab] = useState("items"); // "items" or "outfits"
+  const [selectedItems, setSelectedItems] = useState({ top: null, bottom: null, shoes: null, outerwear: null });
+  const [showCreateOutfit, setShowCreateOutfit] = useState(false);
+
+  // Outfit organization states
+  const [editingOutfitId, setEditingOutfitId] = useState(null);
+  const [editOutfitName, setEditOutfitName] = useState("");
+  const [editOutfitCategory, setEditOutfitCategory] = useState("casual");
+  const [editOutfitNotes, setEditOutfitNotes] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
   const isHome = activePage === "home";
   const isLoggedIn = Boolean(currentUser?.user_id);
+
+  // Show mock items when not logged in OR when logged in but no items exist
+  const showMockData = !isLoggedIn || items.length === 0;
+  const displayItems = showMockData ? mockItems : items;
+  const displayOutfits = showMockData ? mockOutfits : outfits;
 
   // ---------- Items / Supabase ----------
 
@@ -123,13 +187,265 @@ export default function App() {
     if (!error) setItems(data ?? []);
   }
 
-  // Whenever the logged-in user changes, refresh their closet items
+  // ---------- Outfits / Supabase ----------
+
+  // Load outfits for the current user from Supabase
+  async function loadOutfits(userId = currentUser?.user_id) {
+    if (!userId) {
+      setOutfits([]);
+      return;
+    }
+
+    const { data: outfitsData, error } = await supabase
+      .from("outfits")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading outfits:", error);
+      setOutfits([]);
+      return;
+    }
+
+    // Fetch related items for each outfit
+    const outfitsWithItems = await Promise.all(
+      (outfitsData || []).map(async (outfit) => {
+        const [top, bottom, shoes, outerwear] = await Promise.all([
+          outfit.top_id ? supabase.from("items").select("*").eq("id", outfit.top_id).single() : { data: null },
+          outfit.bottom_id ? supabase.from("items").select("*").eq("id", outfit.bottom_id).single() : { data: null },
+          outfit.shoes_id ? supabase.from("items").select("*").eq("id", outfit.shoes_id).single() : { data: null },
+          outfit.outerwear_id ? supabase.from("items").select("*").eq("id", outfit.outerwear_id).single() : { data: null },
+        ]);
+
+        return {
+          ...outfit,
+          top: top.data,
+          bottom: bottom.data,
+          shoes: shoes.data,
+          outerwear: outerwear.data,
+        };
+      })
+    );
+
+    setOutfits(outfitsWithItems);
+  }
+
+  // Save an outfit to the database
+  async function saveOutfit(outfitData) {
+    const { top, bottom, weather, event, shoes = null, outerwear = null, category = "casual" } = outfitData;
+
+    if (!isLoggedIn) {
+      const newOutfit = {
+        id: `outfit-${Date.now()}`,
+        name: `Outfit - ${new Date().toLocaleDateString()}`,
+        top: top,
+        bottom: bottom,
+        shoes: shoes,
+        outerwear: outerwear,
+        weather_temp: weather?.tempF || null,
+        weather_condition: weather?.condition || null,
+        event_title: event?.title || null,
+        event_formality: event?.formality || null,
+        category: category,
+        is_favorite: false,
+        notes: null,
+        created_at: new Date().toISOString(),
+      };
+      setMockOutfits(prev => [newOutfit, ...prev]);
+      setMessage("Outfit saved! (Log in to save permanently)");
+      return true;
+    }
+
+    if (!currentUser?.user_id) {
+      setMessage("Please log in to save outfits.");
+      return false;
+    }
+
+    const outfitRecord = {
+      user_id: currentUser.user_id,
+      name: `Outfit - ${new Date().toLocaleDateString()}`,
+      top_id: top?.id || null,
+      bottom_id: bottom?.id || null,
+      shoes_id: shoes?.id || null,
+      outerwear_id: outerwear?.id || null,
+      weather_temp: weather?.tempF || null,
+      weather_condition: weather?.condition || null,
+      event_title: event?.title || null,
+      event_formality: event?.formality || null,
+      category: category,
+      is_favorite: false,
+      notes: null
+    };
+
+    const { error } = await supabase.from("outfits").insert(outfitRecord);
+    if (error) {
+      setMessage("Failed to save outfit: " + error.message);
+      return false;
+    }
+
+    setMessage("Outfit saved to your closet!");
+    await loadOutfits(currentUser.user_id);
+    return true;
+  }
+
+  // Delete an outfit
+  async function deleteOutfit(outfitId) {
+    if (!isLoggedIn) {
+      setMockOutfits(prev => prev.filter(o => o.id !== outfitId));
+      setMessage("Outfit deleted");
+      return;
+    }
+    const { error } = await supabase.from("outfits").delete().eq("id", outfitId);
+    if (error) {
+      setMessage("Failed to delete outfit: " + error.message);
+      return;
+    }
+    setMessage("Outfit deleted");
+    await loadOutfits(currentUser?.user_id);
+  }
+
+  // Toggle favorite status for an outfit
+  async function toggleFavorite(outfitId, currentStatus) {
+    if (!isLoggedIn) {
+      setMockOutfits(prev => prev.map(o =>
+        o.id === outfitId ? { ...o, is_favorite: !currentStatus } : o
+      ));
+      return;
+    }
+    const { error } = await supabase
+      .from("outfits")
+      .update({ is_favorite: !currentStatus })
+      .eq("id", outfitId);
+
+    if (error) {
+      setMessage("Failed to update favorite: " + error.message);
+      return;
+    }
+
+    await loadOutfits(currentUser?.user_id);
+  }
+
+  // Start editing an outfit
+  function startEditingOutfit(outfit) {
+    setEditingOutfitId(outfit.id);
+    setEditOutfitName(outfit.name || "");
+    setEditOutfitCategory(outfit.category || "casual");
+    setEditOutfitNotes(outfit.notes || "");
+  }
+
+  // Save outfit edits
+  async function saveOutfitEdits(outfitId) {
+    if (!isLoggedIn) {
+      setMockOutfits(prev => prev.map(o =>
+        o.id === outfitId
+          ? { ...o, name: editOutfitName, category: editOutfitCategory, notes: editOutfitNotes }
+          : o
+      ));
+      setMessage("Outfit updated!");
+      setEditingOutfitId(null);
+      return;
+    }
+    const { error } = await supabase
+      .from("outfits")
+      .update({
+        name: editOutfitName,
+        category: editOutfitCategory,
+        notes: editOutfitNotes
+      })
+      .eq("id", outfitId);
+
+    if (error) {
+      setMessage("Failed to update outfit: " + error.message);
+      return;
+    }
+
+    setMessage("Outfit updated successfully!");
+    setEditingOutfitId(null);
+    await loadOutfits(currentUser?.user_id);
+  }
+
+  // Cancel editing
+  function cancelEditing() {
+    setEditingOutfitId(null);
+    setEditOutfitName("");
+    setEditOutfitCategory("casual");
+    setEditOutfitNotes("");
+  }
+
+  // Create outfit manually from selected items
+  async function createOutfitManually() {
+    if (!selectedItems.top && !selectedItems.bottom) {
+      setMessage("Please select at least a top or bottom to create an outfit.");
+      return;
+    }
+
+    if (!isLoggedIn) {
+      const newOutfit = {
+        id: `outfit-${Date.now()}`,
+        name: `Manual Outfit - ${new Date().toLocaleDateString()}`,
+        top: selectedItems.top,
+        bottom: selectedItems.bottom,
+        shoes: selectedItems.shoes,
+        outerwear: selectedItems.outerwear,
+        category: "casual",
+        is_favorite: false,
+        notes: null,
+        created_at: new Date().toISOString(),
+      };
+      setMockOutfits(prev => [newOutfit, ...prev]);
+      setMessage("Outfit created! (Log in to save permanently)");
+      setSelectedItems({ top: null, bottom: null, shoes: null, outerwear: null });
+      setShowCreateOutfit(false);
+      return;
+    }
+
+    if (!currentUser?.user_id) {
+      setMessage("Please log in to create outfits.");
+      return;
+    }
+
+    const outfitRecord = {
+      user_id: currentUser.user_id,
+      name: `Manual Outfit - ${new Date().toLocaleDateString()}`,
+      top_id: selectedItems.top?.id || null,
+      bottom_id: selectedItems.bottom?.id || null,
+      shoes_id: selectedItems.shoes?.id || null,
+      outerwear_id: selectedItems.outerwear?.id || null,
+      category: "casual",
+      is_favorite: false,
+      notes: null
+    };
+
+    const { error } = await supabase.from("outfits").insert(outfitRecord);
+    if (error) {
+      setMessage("Failed to create outfit: " + error.message);
+      return;
+    }
+
+    setMessage("Outfit created and saved!");
+    setSelectedItems({ top: null, bottom: null, shoes: null, outerwear: null });
+    setShowCreateOutfit(false);
+    await loadOutfits(currentUser.user_id);
+  }
+
+  // Toggle item selection for manual outfit creation
+  function toggleItemSelection(item) {
+    setSelectedItems(prev => ({
+      ...prev,
+      [item.category]: prev[item.category]?.id === item.id ? null : item
+    }));
+  }
+
+  // Whenever the logged-in user changes, refresh their closet items and outfits
   useEffect(() => {
     if (!currentUser?.user_id) {
       setItems([]);
+      setOutfits([]);
       return;
     }
     loadItems(currentUser.user_id);
+    loadOutfits(currentUser.user_id);
   }, [currentUser?.user_id]);
 
   // Keep nav state in sync if user edits the hash manually
@@ -425,7 +741,7 @@ export default function App() {
   }
 
   // Generate outfit suggestion using real weather + local calendar events
-  async function suggestOutfit() {
+  async function suggestOutfit(shouldSave = false) {
     setMessage("Generating...");
 
     try {
@@ -461,13 +777,27 @@ export default function App() {
       }
 
       const result = generateOutfitSuggestion({
-        items,
+        items: displayItems,
         weather,
         event,
         calendarEvents,
       });
 
       setMessage(result.message);
+
+      // If shouldSave is true, save the outfit to database
+      if (shouldSave && result.success && result.outfit) {
+        const outfitData = {
+          top: result.outfit.top,
+          bottom: result.outfit.bottom,
+          shoes: result.outfit.shoes,
+          outerwear: result.outfit.outerwear,
+          weather: weather,
+          event: event,
+          category: event.formality || "casual",
+        };
+        await saveOutfit(outfitData);
+      }
     } catch (error) {
       console.error("Error generating outfit suggestion:", error);
       setMessage(
@@ -509,7 +839,7 @@ export default function App() {
           {isLoggedIn && (
             <div className="session-bar">
               <span className="session-indicator logged-in">
-                {`Logged in as ${currentUser.user_email}`}
+                {`Logged in as ${currentUser?.user_email}`}
               </span>
               <button
                 type="button"
@@ -526,11 +856,47 @@ export default function App() {
           <section className="card home-card">
             {!isLoggedIn && (
               <div className="login-alert">
-                Log in to upload clothing items and view your personal
-                closet.
+                Log in to upload and save your own clothing items. Preview sample items below!
               </div>
             )}
 
+            {/* Tab Navigation - Always show so guests can browse */}
+            <div style={{ display: "flex", gap: 0, marginBottom: 24, borderBottom: "2px solid #e5e7eb" }}>
+                <button
+                  onClick={() => setActiveTab("items")}
+                  style={{
+                    padding: "12px 24px",
+                    border: "none",
+                    background: activeTab === "items" ? "#4285F4" : "transparent",
+                    color: activeTab === "items" ? "white" : "#666",
+                    cursor: "pointer",
+                    borderRadius: "8px 8px 0 0",
+                    fontWeight: activeTab === "items" ? 600 : 400,
+                    fontSize: "14px",
+                  }}
+                >
+                  My Items
+                </button>
+                <button
+                  onClick={() => setActiveTab("outfits")}
+                  style={{
+                    padding: "12px 24px",
+                    border: "none",
+                    background: activeTab === "outfits" ? "#4285F4" : "transparent",
+                    color: activeTab === "outfits" ? "white" : "#666",
+                    cursor: "pointer",
+                    borderRadius: "8px 8px 0 0",
+                    fontWeight: activeTab === "outfits" ? 600 : 400,
+                    fontSize: "14px",
+                  }}
+                >
+                  My Outfits ({displayOutfits.length})
+                </button>
+            </div>
+
+            {/* Items Tab Content */}
+            {activeTab === "items" && (
+              <>
             {/* Upload form */}
             <form onSubmit={handleUpload} className="item-form">
               <input
@@ -590,11 +956,27 @@ export default function App() {
                 Test Weather API
               </button>
               <button
-                onClick={suggestOutfit}
+                onClick={() => suggestOutfit(false)}
                 className="suggest-button"
                 style={{ padding: "8px 16px" }}
               >
                 Suggest Outfit (weather + calendar)
+              </button>
+              <button
+                onClick={() => suggestOutfit(true)}
+                style={{
+                  backgroundColor: "#059669",
+                  color: "white",
+                  border: "none",
+                  padding: "8px 16px",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  fontWeight: 500,
+                }}
+                disabled={!isLoggedIn}
+                title={!isLoggedIn ? "Log in to save outfits" : "Generate and save outfit"}
+              >
+                Suggest & Save Outfit
               </button>
             </div>
 
@@ -1072,23 +1454,309 @@ export default function App() {
               </div>
             )}
 
+            {/* Manual outfit creation controls */}
+            {isLoggedIn && (
+              <div style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  onClick={() => setShowCreateOutfit(!showCreateOutfit)}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: showCreateOutfit ? "#4285F4" : "#e5e7eb",
+                    color: showCreateOutfit ? "white" : "#333",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontWeight: 500,
+                  }}
+                >
+                  {showCreateOutfit ? "Cancel Selection" : "Create Outfit Manually"}
+                </button>
+                {showCreateOutfit && (
+                  <>
+                    <span style={{ fontSize: 14, color: "#666" }}>
+                      Click items below to select them for your outfit
+                    </span>
+                    <button
+                      onClick={createOutfitManually}
+                      disabled={!selectedItems.top && !selectedItems.bottom}
+                      style={{
+                        padding: "8px 16px",
+                        backgroundColor: (!selectedItems.top && !selectedItems.bottom) ? "#ccc" : "#059669",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 6,
+                        cursor: (!selectedItems.top && !selectedItems.bottom) ? "not-allowed" : "pointer",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Save Outfit
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Selected items preview */}
+            {showCreateOutfit && (
+              <div style={{
+                marginBottom: 16,
+                padding: 12,
+                backgroundColor: "#f0f4ff",
+                borderRadius: 8,
+                border: "1px solid #4285F4",
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Selected Items:</div>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 14 }}>
+                  <span>Top: {selectedItems.top?.name || "None"}</span>
+                  <span>Bottom: {selectedItems.bottom?.name || "None"}</span>
+                  <span>Shoes: {selectedItems.shoes?.name || "None"}</span>
+                  <span>Outerwear: {selectedItems.outerwear?.name || "None"}</span>
+                </div>
+              </div>
+            )}
+
             {/* Items grid */}
             <h3>Your Items</h3>
             <div className="items-grid">
-              {items.map((it) => (
-                <div key={it.id} className="item-card">
-                  <img
-                    src={it.image_url}
-                    alt={it.name}
-                    className="item-card__image"
-                  />
-                  <div className="item-card__name">{it.name}</div>
-                  <div className="item-card__meta">
-                    {`${it.category} - ${it.color}`}
+              {displayItems.map((it) => {
+                const isSelected = selectedItems[it.category]?.id === it.id;
+                return (
+                  <div
+                    key={it.id}
+                    className="item-card"
+                    onClick={() => showCreateOutfit && toggleItemSelection(it)}
+                    style={{
+                      cursor: showCreateOutfit ? "pointer" : "default",
+                      border: isSelected ? "3px solid #4285F4" : undefined,
+                      backgroundColor: isSelected ? "#f0f4ff" : undefined,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <img
+                      src={it.image_url}
+                      alt={it.name}
+                      className="item-card__image"
+                    />
+                    <div className="item-card__name">{it.name}</div>
+                    <div className="item-card__meta">
+                      {`${it.category} - ${it.color}`}
+                    </div>
+                    {isSelected && (
+                      <div style={{ fontSize: 12, color: "#4285F4", fontWeight: 600, marginTop: 4 }}>
+                        ✓ Selected
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+              </>
+            )}
+
+            {/* Outfits Tab Content */}
+            {activeTab === "outfits" && (
+              <>
+                {/* Filter Controls */}
+                <div style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <div>
+                    <label style={{ marginRight: 8, fontSize: 14, fontWeight: 500 }}>Category:</label>
+                    <select
+                      value={filterCategory}
+                      onChange={(e) => setFilterCategory(e.target.value)}
+                      style={{ padding: "6px 12px", borderRadius: 4, border: "1px solid #ddd" }}
+                    >
+                      <option value="all">All Categories</option>
+                      <option value="casual">Casual</option>
+                      <option value="formal">Formal</option>
+                      <option value="work">Work</option>
+                      <option value="athletic">Athletic</option>
+                      <option value="party">Party</option>
+                      <option value="date">Date</option>
+                      <option value="travel">Travel</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                    style={{
+                      padding: "6px 12px",
+                      background: showFavoritesOnly ? "#4285F4" : "#f0f0f0",
+                      color: showFavoritesOnly ? "white" : "black",
+                      border: "1px solid #ddd",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      fontSize: 14,
+                    }}
+                  >
+                    {showFavoritesOnly ? "★ Showing Favorites" : "☆ Show Favorites Only"}
+                  </button>
+                </div>
+
+                {/* Outfits Grid */}
+                <h3>My Saved Outfits</h3>
+                {displayOutfits.length === 0 ? (
+                  <p style={{ color: "#666", fontStyle: "italic" }}>
+                    No saved outfits yet. Go to "My Items" tab and use "Suggest Outfit" or "Create Outfit Manually" to add some!
+                  </p>
+                ) : (
+                  <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
+                    {displayOutfits
+                      .filter((outfit) => {
+                        if (filterCategory !== "all" && outfit.category !== filterCategory) return false;
+                        if (showFavoritesOnly && !outfit.is_favorite) return false;
+                        return true;
+                      })
+                      .map((outfit) => (
+                        <div
+                          key={outfit.id}
+                          style={{
+                            border: "1px solid #ddd",
+                            borderRadius: 12,
+                            padding: 16,
+                            backgroundColor: "#fafafa",
+                          }}
+                        >
+                          {/* Outfit Header */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 12 }}>
+                            <div style={{ flex: 1 }}>
+                              {editingOutfitId === outfit.id ? (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                  <input
+                                    type="text"
+                                    value={editOutfitName}
+                                    onChange={(e) => setEditOutfitName(e.target.value)}
+                                    placeholder="Outfit name"
+                                    style={{ padding: "6px 8px", fontSize: 14, border: "1px solid #ddd", borderRadius: 4 }}
+                                  />
+                                  <select
+                                    value={editOutfitCategory}
+                                    onChange={(e) => setEditOutfitCategory(e.target.value)}
+                                    style={{ padding: "6px 8px", fontSize: 12, border: "1px solid #ddd", borderRadius: 4 }}
+                                  >
+                                    <option value="casual">Casual</option>
+                                    <option value="formal">Formal</option>
+                                    <option value="work">Work</option>
+                                    <option value="athletic">Athletic</option>
+                                    <option value="party">Party</option>
+                                    <option value="date">Date</option>
+                                    <option value="travel">Travel</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                  <textarea
+                                    value={editOutfitNotes}
+                                    onChange={(e) => setEditOutfitNotes(e.target.value)}
+                                    placeholder="Notes (optional)"
+                                    rows={2}
+                                    style={{ padding: "6px 8px", fontSize: 12, border: "1px solid #ddd", borderRadius: 4, resize: "vertical" }}
+                                  />
+                                  <div style={{ display: "flex", gap: 8 }}>
+                                    <button
+                                      onClick={() => saveOutfitEdits(outfit.id)}
+                                      style={{ padding: "6px 12px", backgroundColor: "#059669", color: "white", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={cancelEditing}
+                                      style={{ padding: "6px 12px", backgroundColor: "#6b7280", color: "white", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <span
+                                      onClick={() => toggleFavorite(outfit.id, outfit.is_favorite)}
+                                      style={{ cursor: "pointer", fontSize: 18 }}
+                                    >
+                                      {outfit.is_favorite ? "★" : "☆"}
+                                    </span>
+                                    <span style={{ fontWeight: 600, fontSize: 16 }}>{outfit.name}</span>
+                                  </div>
+                                  <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                                    <span style={{
+                                      backgroundColor: "#e5e7eb",
+                                      padding: "2px 8px",
+                                      borderRadius: 4,
+                                      marginRight: 8,
+                                    }}>
+                                      {outfit.category || "casual"}
+                                    </span>
+                                    {new Date(outfit.created_at).toLocaleDateString()}
+                                  </div>
+                                  {outfit.notes && (
+                                    <div style={{ fontSize: 12, color: "#666", marginTop: 4, fontStyle: "italic" }}>
+                                      {outfit.notes}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                            {editingOutfitId !== outfit.id && (
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button
+                                  onClick={() => startEditingOutfit(outfit)}
+                                  style={{ padding: "4px 8px", backgroundColor: "#4285F4", color: "white", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 11 }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm("Delete this outfit?")) deleteOutfit(outfit.id);
+                                  }}
+                                  style={{ padding: "4px 8px", backgroundColor: "#dc3545", color: "white", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 11 }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Outfit Items */}
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                            {[
+                              { label: "Top", item: outfit.top },
+                              { label: "Bottom", item: outfit.bottom },
+                              { label: "Shoes", item: outfit.shoes },
+                              { label: "Outerwear", item: outfit.outerwear },
+                            ].map(({ label, item }) => (
+                              <div key={label} style={{ fontSize: 12 }}>
+                                <div style={{ fontWeight: 500, color: "#666" }}>{label}:</div>
+                                {item ? (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    <img
+                                      src={item.image_url}
+                                      alt={item.name}
+                                      style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 4 }}
+                                    />
+                                    <span>{item.name}</span>
+                                  </div>
+                                ) : (
+                                  <span style={{ color: "#999" }}>None</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Weather/Event Context */}
+                          {(outfit.weather_temp || outfit.event_title) && (
+                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee", fontSize: 12, color: "#666" }}>
+                              {outfit.weather_temp && (
+                                <div>🌤️ {outfit.weather_temp}°F - {outfit.weather_condition}</div>
+                              )}
+                              {outfit.event_title && (
+                                <div>📅 {outfit.event_title} ({outfit.event_formality})</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </>
+            )}
           </section>
         ) : (
           <AuthPage
