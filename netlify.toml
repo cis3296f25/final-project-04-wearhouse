@@ -1,4 +1,4 @@
 [build]
-  base = "wearhouse-poc"
+  base = "Wearhouse/wearhouse-poc"
   publish = "dist"
   command = "npm run build"
