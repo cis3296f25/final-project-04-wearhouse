@@ -815,42 +815,51 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="app-inner">
-        <header className="app-header">
-          <div>
-            <h1 className="app-title">WearHouse POC</h1>
-          </div>
-          <nav className="app-nav">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.id}
-                href={`#${link.id}`}
-                aria-current={activePage === link.id ? "page" : undefined}
-                className={navLinkClassName(activePage === link.id)}
-                onClick={(evt) => {
-                  evt.preventDefault();
-                  setActivePage(link.id);
-                  updateLocationHash(link.id);
-                }}
-              >
-                {link.label}
-              </a>
-            ))}
-          </nav>
-          {isLoggedIn && (
-            <div className="session-bar">
-              <span className="session-indicator logged-in">
-                {`Logged in as ${currentUser?.user_email}`}
+              <header className="app-header">
+        <div className="app-header-left">
+          <h1 className="app-title">WearHouse</h1>
+          {isLoggedIn && currentUser && (
+            <div className="app-welcome">
+              <span className="welcome-text">
+                Welcome, {currentUser.user_email}
               </span>
-              <button
-                type="button"
-                className="logout-button"
-                onClick={handleLogout}
-              >
-                Log out
-              </button>
+              <div className="avatar-circle">
+                {currentUser.user_email?.[0]?.toUpperCase()}
+              </div>
             </div>
           )}
-        </header>
+        </div>
+
+        <nav className="app-nav">
+          {NAV_LINKS.map((link) => (
+            <a
+              key={link.id}
+              href={`#${link.id}`}
+              aria-current={activePage === link.id ? "page" : undefined}
+              className={navLinkClassName(activePage === link.id)}
+              onClick={(evt) => {
+                evt.preventDefault();
+                setActivePage(link.id);
+                updateLocationHash(link.id);
+              }}
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+
+        {isLoggedIn && (
+          <div className="session-bar">
+            <button
+              type="button"
+              className="logout-button"
+              onClick={handleLogout}
+            >
+              Log out
+            </button>
+          </div>
+        )}
+      </header>
 
         {isHome ? (
           <section className="card home-card">
