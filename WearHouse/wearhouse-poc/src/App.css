@@ -1,0 +1,346 @@
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #f4f6fb;
+  color: #0f172a;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  display: block;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background-color: #f4f6fb;
+}
+
+.app-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background-color: #fdf9f3; 
+}
+
+/* Left side of header: title + welcome */
+.app-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-title {
+  margin: 0;
+}
+
+.app-subtitle {
+  margin: 4px 0 0;
+  color: #475467;
+}
+
+/* Welcome + avatar */
+.app-welcome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.welcome-text {
+  font-size: 0.95rem;
+  color: #4b5563;
+}
+
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 2px solid #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+
+.app-title {
+  margin: 0;
+}
+
+.app-subtitle {
+  margin: 4px 0 0;
+  color: #475467;
+}
+
+.app-nav {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app-nav-link {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  text-decoration: none;
+  color: #0f172a;
+  background-color: transparent;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.app-nav-link:hover {
+  border-color: #0f172a;
+}
+
+.app-nav-link.is-active {
+  background-color: #0f172a;
+  color: #fff;
+}
+
+.session-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.session-indicator {
+  font-weight: 600;
+}
+
+.session-indicator.logged-in {
+  color: #047857;
+}
+
+.logout-button {
+  background-color: #fff;
+  color: #0f172a;
+  border: 1px solid #cbd5f5;
+}
+
+.logout-button:hover {
+  border-color: #0f172a;
+}
+
+.card {
+  background-color: #fff;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.home-card {
+  margin-bottom: 24px;
+}
+
+.login-alert {
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #fef3c7;
+  color: #92400e;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.item-form {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin-bottom: 16px;
+}
+/* Make form fields and buttons the same width visually */
+.item-form > * {
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+/* Normalize the file input appearance */
+.item-form input[type="file"] {
+  width: 100%;
+  padding: 0.6em 0.8em;
+  border-radius: 8px;
+  border: 1px solid #d0d5dd;
+  background-color: white;
+  font: inherit;
+}
+
+/* Make the Add Item button visually match input width */
+.item-form button {
+  width: 100%;
+  padding: 0.75em;
+  border-radius: 8px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.item-form input,
+.item-form select {
+  width: 100%;
+  padding: 0.6em 0.8em;
+  border-radius: 8px;
+  border: 1px solid #d0d5dd;
+  font: inherit;
+}
+
+.item-form input:focus,
+.item-form select:focus {
+  border-color: #2563eb;
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.suggest-button {
+  margin-bottom: 12px;
+}
+
+.status-message {
+  margin-bottom: 12px;
+  min-height: 24px;
+  font-weight: 600;
+}
+
+.items-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.item-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.item-card__image {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.item-card__name {
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.item-card__meta {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.auth-card {
+  max-width: 520px;
+  margin: 24px auto;
+}
+
+.auth-title {
+  margin: 0;
+}
+
+.auth-description {
+  margin: 4px 0 16px;
+  color: #475467;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 0.6em 0.8em;
+  border-radius: 8px;
+  border: 1px solid #d0d5dd;
+  font: inherit;
+}
+
+.auth-form input:focus {
+  border-color: #2563eb;
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+
+.auth-status {
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.auth-status.is-success {
+  color: #047857;
+}
+
+.auth-status.is-error {
+  color: #b91c1c;
+}
+
+/* Make   the auth form the same width */
+.auth-form > * {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+
+.auth-form button {
+  width: 100%;
+  padding: 0.75em;
+  border-radius: 8px;
+  font-weight: 600;
+  text-align: center;
+}
+
+
+
+
+/* === Items tab two-column layout === */
+
+.items-tab-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 24px;
+}
+
+
+
+.items-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Left column with brown accent background ("My Closet"), but I think this doesn't work  */
+.items-column--closet {
+  background-color: #f1e5d3;
+  padding: 16px;
+  border-radius: 16px;
+}
+
+
+.items-column--planner {
+  padding: 4px;
+}
+
+.item-form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.item-form-row > * {
+  flex: 1;
+}
+
+
+

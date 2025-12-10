@@ -1,0 +1,125 @@
+# WearHouse POC
+
+WearHouse is a smart outfit suggestion app that uses weather data and calendar events to help you pick the perfect outfit.
+
+## Features
+
+- Upload clothing items with automatic background removal
+- Weather-based outfit suggestions using real-time weather data
+- Google Calendar integration for event-appropriate outfit recommendations
+- **Set event formality levels** (Casual, Business, Formal) directly in your calendar
+- Smart color and formality matching
+
+## API Setup
+
+### Weather API (OpenWeatherMap)
+
+To enable real weather data:
+
+1. Sign up for a free API key at [OpenWeatherMap](https://openweathermap.org/api)
+2. Create a `.env` file in the `wearhouse-poc` directory (if it doesn't exist)
+3. Add your API key:
+   ```
+   VITE_WEATHER_API_KEY=your_api_key_here
+   ```
+
+**Note:** The app will work without this key but will use mock weather data instead.
+
+### Google Calendar API (Optional)
+
+WearHouse supports two methods for Google Calendar integration:
+
+#### Method 1: OAuth 2.0 (Recommended - Full Access)
+
+This method allows you to:
+- Access your private Google Calendar
+- Set and update event formality levels
+- Full read/write access to your calendar events
+
+**Setup Steps:**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the "Google Calendar API":
+   - Navigate to **APIs & Services** → **Library**
+   - Search for "Google Calendar API"
+   - Click **Enable**
+4. Create OAuth 2.0 credentials:
+   - Go to **APIs & Services** → **Credentials**
+   - Click **Create Credentials** → **OAuth client ID**
+   - If prompted, configure the OAuth consent screen:
+     - Choose **External** (unless you have a Google Workspace)
+     - Fill in app name, user support email, and developer contact
+     - Add scopes: `https://www.googleapis.com/auth/calendar.events`
+     - Add test users (your email) if in testing mode
+   - Choose **Web application** as the application type
+   - Add **Authorized JavaScript origins**:
+     - `http://localhost:5173` (or your dev server port)
+     - Your production URL (e.g., `https://yourdomain.com`)
+   - Add **Authorized redirect URIs**:
+     - `http://localhost:5173` (or your dev server port)
+     - Your production URL
+   - Click **Create**
+5. Copy the **Client ID** (not the Client Secret - we don't need it for client-side OAuth)
+6. Add to your `.env` file:
+   ```
+   VITE_GOOGLE_CLIENT_ID=your_client_id_here.apps.googleusercontent.com
+   VITE_GOOGLE_CALENDAR_ID=primary
+   ```
+
+**Note:** The OAuth consent screen may need to be verified by Google if you're making it public. For development, you can add test users.
+
+#### Method 2: API Key (Public Calendars Only)
+
+This method only works for **public calendars** and has limited functionality:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the "Google Calendar API"
+4. Create an API key:
+   - Go to **APIs & Services** → **Credentials**
+   - Click **Create Credentials** → **API key**
+   - (Optional) Restrict the API key to Calendar API only
+5. Add to your `.env` file:
+   ```
+   VITE_GOOGLE_CALENDAR_API_KEY=your_api_key_here
+   VITE_GOOGLE_CALENDAR_ID=primary
+   ```
+
+**Note:** 
+- Using just an API key works for **public calendars only**
+- You cannot update event formality with API key method
+- Leave these variables unset to use mock calendar data
+
+## Environment Variables
+
+Create a `.env` file in the `wearhouse-poc` directory:
+
+```env
+# Supabase (required)
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON=your_supabase_anon_key
+
+# Weather API (optional - falls back to mock if not set)
+VITE_WEATHER_API_KEY=your_openweathermap_api_key
+
+# Google Calendar API (optional - falls back to mock if not set)
+# Method 1: OAuth 2.0 (Recommended - for private calendars and formality updates)
+VITE_GOOGLE_CLIENT_ID=your_oauth_client_id.apps.googleusercontent.com
+VITE_GOOGLE_CALENDAR_ID=primary
+
+# Method 2: API Key (Public calendars only - limited functionality)
+# VITE_GOOGLE_CALENDAR_API_KEY=your_google_calendar_api_key
+# VITE_GOOGLE_CALENDAR_ID=primary
+```
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
